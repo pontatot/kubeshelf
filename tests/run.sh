@@ -479,6 +479,11 @@ test_completion_config_in_words() {
   assert_out_eq "staging"
 }
 
+test_pages_recording_in_sync() {
+  cmp -s "$ROOT/demo/demo.cast" "$ROOT/docs/demo.cast" || fail "docs/demo.cast differs from demo/demo.cast: run make demo-gif"
+  grep -q 'AsciinemaPlayer.create("demo.cast"' "$ROOT/docs/index.html" || fail "docs/index.html does not play demo.cast"
+}
+
 # --- runner --------------------------------------------------------------------
 
 pattern="${1:-}"

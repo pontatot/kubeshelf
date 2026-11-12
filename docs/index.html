@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>kubeshelf demo</title>
+  <meta name="description" content="kubeshelf: switch clusters and namespaces, find which cluster has a namespace and open k9s anywhere, for one-kubeconfig-per-cluster setups.">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/asciinema-player@3.17.0/dist/bundle/asciinema-player.css">
+  <style>
+    :root {
+      --bg: #f6f7f9;
+      --surface: #ffffff;
+      --text: #1d2129;
+      --muted: #5b6372;
+      --border: #dfe3ea;
+      --accent: #2f6fde;
+      --code-bg: #eef1f5;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #16181d;
+        --surface: #1e2128;
+        --text: #e6e8ec;
+        --muted: #9aa3b2;
+        --border: #2e333d;
+        --accent: #7aa7ff;
+        --code-bg: #262a33;
+      }
+    }
+    :root[data-theme="dark"] {
+      --bg: #16181d;
+      --surface: #1e2128;
+      --text: #e6e8ec;
+      --muted: #9aa3b2;
+      --border: #2e333d;
+      --accent: #7aa7ff;
+      --code-bg: #262a33;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    main { max-width: 980px; margin: 0 auto; padding: 40px 16px 56px; }
+    h1 { font-size: 2rem; margin: 0 0 4px; letter-spacing: -0.01em; }
+    .tagline { color: var(--muted); margin: 0 0 28px; max-width: 70ch; }
+    .player {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      background: #282a36;
+    }
+    .note { color: var(--muted); font-size: 0.875rem; margin: 10px 2px 32px; }
+    h2 { font-size: 1.125rem; margin: 0 0 10px; }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+      overflow-x: auto;
+      font: 0.875rem/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      margin: 0 0 28px;
+    }
+    a { color: var(--accent); }
+    .links { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>kubeshelf</h1>
+    <p class="tagline">
+      A zsh plugin for one-kubeconfig-per-cluster setups: switch clusters and namespaces,
+      find which cluster has a namespace, and open k9s anywhere, with per-cluster tab-completion.
+    </p>
+
+    <div class="player" id="demo" aria-label="Terminal recording of the kubeshelf demo"></div>
+    <p class="note">
+      Pause anywhere to select and copy text. Recorded on fake clusters; k9s is shown with a
+      stand-in screen. Keys: <kbd>space</kbd> play/pause, <kbd>←</kbd>/<kbd>→</kbd> seek.
+    </p>
+
+    <h2>Install (oh-my-zsh)</h2>
+<pre><code>git clone https://github.com/pontatot/kubeshelf.git ~/.oh-my-zsh/custom/plugins/kubeshelf
+~/.oh-my-zsh/custom/plugins/kubeshelf/install.sh
+rm -f ~/.zcompdump* &amp;&amp; exec zsh</code></pre>
+
+    <h2>Commands shown</h2>
+<pre><code>kwhere payments                # which clusters have the 'payments' namespace
+kwhere -p payments             # substring match: payments, payments-staging...
+kswitch staging -n payments-staging   # default kubeconfig + namespace
+kopen prod -n payments         # k9s on prod, directly in 'payments'
+kopen -n monitoring            # find the cluster(s) first, pick one if several</code></pre>
+
+    <div class="links">
+      <a href="https://github.com/pontatot/kubeshelf">Source on GitHub</a>
+      <a href="https://github.com/pontatot/kubeshelf#readme">Documentation</a>
+      <a href="demo.cast">Download the recording (.cast)</a>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/asciinema-player@3.17.0/dist/bundle/asciinema-player.min.js"></script>
+  <script>
+    AsciinemaPlayer.create("demo.cast", document.getElementById("demo"), {
+      theme: "dracula",
+      fit: "width",
+      idleTimeLimit: 2,
+      poster: "npt:0:21",
+      preload: true
+    });
+  </script>
+</body>
+</html>

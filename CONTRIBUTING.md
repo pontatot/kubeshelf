@@ -35,6 +35,10 @@ make lint test
 clusters (the test fixtures) and a k9s stand-in, so nothing real appears in the recording.
 Try it by hand with `./demo/shell.sh`. Re-record it when the output of a command changes.
 
+The recording is also published with selectable text on GitHub Pages: `docs/index.html`
+(asciinema-player) plays `docs/demo.cast`, a copy that `make demo` / `make demo-gif` keep in
+sync (a test checks it). Pages is served from the `/docs` folder of `main`.
+
 ## Releasing
 
 1. Bump `KT_VERSION` in `lib/common.sh` (semantic versioning).

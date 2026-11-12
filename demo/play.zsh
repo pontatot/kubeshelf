@@ -42,11 +42,13 @@ type_ "kswitch staging -n pay";     pause 0.4; key $TAB 1; key $ENTER 2.5
 
 # Open k9s in a namespace of another cluster
 type_ "kopen prod -n ";             pause 0.3; key $TAB 1.5
-type_ "mon";                        pause 0.3; key $TAB 0.6; key $ENTER 2
+type_ "pay";                        pause 0.3; key $TAB 0.6; key $ENTER 3
+key q 1                             # quit k9s
 
 # Only know the namespace? kopen finds the cluster
 type_ "kopen -n monitoring";        pause 0.4; key $ENTER 2.5
-type_ "2";                          pause 0.4; key $ENTER 3
+type_ "3";                          pause 0.4; key $ENTER 3
+key q 1.5
 
 zpty -w demo "exit"; sleep 0.5; drain   # not shown in the recording
 zpty -d demo

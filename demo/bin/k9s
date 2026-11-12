@@ -1,9 +1,97 @@
 #!/usr/bin/env bash
-# Stand-in for k9s in the demo: shows where the real k9s would have opened
+#
+# k9s - Demo stand-in for k9s (https://k9scli.io): draws a k9s-like pod list for the
+# cluster/namespace kopen opened, so the recording shows where you land. Not the real k9s:
+# the demo clusters are fake, there is no API server to talk to. Quit with q (or after 30s).
+#
 ns="default"
+args=("$@")
 while [ $# -gt 0 ]; do
   case "$1" in -n|--namespace) ns="$2"; shift ;; esac
   shift
 done
-cluster="${KUBECONFIG##*/}"; cluster="${cluster%.config}"
-printf '\033[1;36m k9s\033[0m  cluster \033[1m%s\033[0m  ·  namespace \033[1m%s\033[0m\n' "${cluster:-default}" "$ns"
+case "${args[0]:-}" in
+  version|info|help|completion) echo "k9s demo stand-in"; exit 0 ;;
+esac
+
+cluster="${KUBECONFIG##*/}"; cluster="${cluster%.config}"; cluster="${cluster:-default}"
+cols=$(tput cols 2>/dev/null || echo 100); rows=$(tput lines 2>/dev/null || echo 26)
+
+# Fake pods per namespace: name ready status restarts age
+pods() {
+  case "$1" in
+    monitoring) cat <<EOF
+alertmanager-main-0 2/2 Running 0 12d
+grafana-7d9f8c6b5-x2lqp 1/1 Running 0 3d4h
+kube-state-metrics-6b4c9d8f7-kq8zt 1/1 Running 0 12d
+node-exporter-4hxkd 1/1 Running 0 12d
+node-exporter-9m2wq 1/1 Running 1 12d
+prometheus-server-0 2/2 Running 0 5d1h
+EOF
+    ;;
+    payments*) cat <<EOF
+payments-api-5c8d7f9b6-7hjkl 1/1 Running 0 2h14m
+payments-api-5c8d7f9b6-m4vxp 1/1 Running 0 2h14m
+payments-worker-79b6d5c4f-qz2nr 1/1 Running 3 1d6h
+payments-migrate-28461930-ttw9k 0/1 Completed 0 2h15m
+EOF
+    ;;
+    argocd) cat <<EOF
+argocd-application-controller-0 1/1 Running 0 8d
+argocd-repo-server-6f7b9c8d5-p9wq2 1/1 Running 0 8d
+argocd-server-5d4c7b8f9-hx7lm 1/1 Running 0 8d
+EOF
+    ;;
+    *) cat <<EOF
+$1-app-6c9f7d8b5-r2k4p 1/1 Running 0 4d
+$1-app-6c9f7d8b5-w8n3x 1/1 Running 0 4d
+EOF
+    ;;
+  esac
+}
+
+Y=$'\033[33m' G=$'\033[32m' M=$'\033[35m' W=$'\033[1;37m' D=$'\033[2m' R=$'\033[0m'
+C_BOX=$'\033[36m' SEL=$'\033[30;46m'
+
+pad() { printf "%-${2}s" "${1:0:$2}"; }
+hline() { local n=$1 s=""; while [ "$n" -gt 0 ]; do s+="─"; n=$((n-1)); done; printf '%s' "$s"; }
+
+draw() {
+  local inner=$((cols - 2)) title count line i=0 name ready status restarts age color row
+  mapfile -t lines < <(pods "$ns")
+  count=${#lines[@]}
+  printf '\033[H\033[2J'
+  printf ' %sContext:%s %s%s%s\n'   "$Y" "$R" "$W" "$cluster" "$R"
+  printf ' %sCluster:%s %s\n'       "$Y" "$R" "$cluster"
+  printf ' %sUser:%s    %s-admin\n' "$Y" "$R" "$cluster"
+  printf ' %sK9s Rev:%s demo stand-in\n\n' "$Y" "$R"
+  title=" Pods(${ns})[${count}] "
+  printf '%s┌%s%s%s%s┐%s\n' "$C_BOX" "$(hline $(( (inner - ${#title}) / 2 )))" "$W" "$title" \
+    "$C_BOX$(hline $(( inner - ${#title} - (inner - ${#title}) / 2 )))" "$R"
+  row=" $(pad NAME 40) $(pad READY 7) $(pad STATUS 11) $(pad RESTARTS 9) $(pad AGE 8)"
+  printf '%s│%s%s%s%s│%s\n' "$C_BOX" "$W" "$(pad "$row" "$inner")" "$R" "$C_BOX" "$R"
+  for line in "${lines[@]}"; do
+    read -r name ready status restarts age <<< "$line"
+    [ "$status" = "Running" ] && color=$G || color=$D
+    row=" $(pad "$name" 40) $(pad "$ready" 7) $(pad "$status" 11) $(pad "$restarts" 9) $(pad "$age" 8)"
+    if [ "$i" -eq 0 ]; then
+      printf '%s│%s%s%s%s│%s\n' "$C_BOX" "$SEL" "$(pad "$row" "$inner")" "$R" "$C_BOX" "$R"
+    else
+      printf '%s│%s%s%s%s│%s\n' "$C_BOX" "$color" "$(pad "$row" "$inner")" "$R" "$C_BOX" "$R"
+    fi
+    i=$((i + 1))
+  done
+  # fill the box down to the bottom of the screen
+  for ((i = count + 8; i < rows - 1; i++)); do
+    printf '%s│%s│%s\n' "$C_BOX" "$(pad "" "$inner")" "$R"
+  done
+  printf '%s└%s┘%s' "$C_BOX" "$(hline "$inner")" "$R"
+  printf '\033[%d;%dH%s<pod>%s' "$rows" 2 "$M" "$R"
+}
+
+printf '\033[?1049h\033[?25l'                    # alternate screen, hide cursor (like a TUI)
+trap 'printf "\033[?25h\033[?1049l"' EXIT        # restore the terminal on exit
+draw
+while IFS= read -rsn1 -t 30 key; do
+  [ "$key" = "q" ] && break
+done
