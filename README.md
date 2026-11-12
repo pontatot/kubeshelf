@@ -7,7 +7,9 @@ A small zsh plugin for people who keep **one kubeconfig file per cluster**
 (`~/.kube/prod.config`, `~/.kube/staging.config`, ...) and want to move between
 them, and their namespaces, without thinking about it.
 
-![kubeshelf demo: kwhere, kswitch and kopen with namespace completion](demo/demo.gif)
+[![kubeshelf demo: kwhere, kswitch and kopen with namespace completion](demo/demo.gif)](https://pontatot.github.io/kubeshelf/)
+
+<sub>Click the animation to <a href="https://pontatot.github.io/kubeshelf/">watch it with selectable text</a>. Recorded on fake clusters; k9s is shown with a stand-in screen. Source: <a href="demo/">demo/</a>.</sub>
 
 ```console
 $ kwhere payments

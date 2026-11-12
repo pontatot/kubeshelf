@@ -30,4 +30,5 @@ demo:
 demo-gif:
 	@command -v agg >/dev/null || { echo "agg is required to make demo/demo.gif: https://github.com/asciinema/agg"; exit 1; }
 	agg --font-size 18 demo/demo.cast demo/demo.gif
-	@echo "demo/demo.gif written"
+	cp demo/demo.cast docs/demo.cast   # played by the GitHub Pages player (docs/index.html)
+	@echo "demo/demo.gif and docs/demo.cast written"
