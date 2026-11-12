@@ -1,0 +1,21 @@
+#autoload
+# Completes namespaces of the config named in $_kt_config (set by the caller),
+# or of every known cluster when it is empty. Arguments are compadd options
+# (passed by _arguments) and are forwarded to _describe.
+# Reads the cache refreshed by kwhere / kswitch / kopen: never calls the network.
+local config=${_kt_config:-} f
+local cache_dir=${KUBESHELF_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/kubeshelf}/namespaces
+local -a namespaces
+if [[ -n $config && -r $cache_dir/$config ]]; then
+  namespaces=(${(f)"$(<$cache_dir/$config)"})
+elif [[ -n $config ]]; then
+  _message "no cached namespaces for $config yet (run: kwhere <namespace>)"
+  return 1
+else
+  for f in $cache_dir/*(N-.); do
+    namespaces+=(${(f)"$(<$f)"})
+  done
+  namespaces=(${(u)namespaces})
+  (( $#namespaces )) || { _message "no cached namespaces yet (run: kwhere <namespace>)"; return 1; }
+fi
+_describe -t namespaces "namespaces${config:+ of $config}" namespaces "$@"

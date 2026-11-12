@@ -1,0 +1,16 @@
+#compdef kswitch
+local _kt_config
+_kt_config=$(_kubeshelf_config_in_words)
+if [[ -z $_kt_config ]]; then
+  # namespace of the current default config
+  local link=${KUBESHELF_DEFAULT_LINK:-${KUBESHELF_CONFIG_DIR:-$HOME/.kube}/config}
+  [[ -L $link ]] && _kt_config=${${$(readlink "$link"):t}%${KUBESHELF_CONFIG_SUFFIX:-.config}}
+fi
+_arguments -s \
+  '(- *)'{-h,--help}'[show help]' \
+  '(- *)'{-V,--version}'[show version]' \
+  '(- *)'{-l,--list}'[list available kubeconfigs]' \
+  '(- *)'{-c,--current}'[show current default config and namespace]' \
+  '(- *)'{-r,--remove}'[remove the default kubeconfig symlink]' \
+  '(-n --namespace)'{-n,--namespace}'[set the default namespace]:namespace:_kubeshelf_ns' \
+  '1:kubeconfig:_kubeshelf_configs'

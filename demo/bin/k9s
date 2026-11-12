@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Stand-in for k9s in the demo: shows where the real k9s would have opened
+ns="default"
+while [ $# -gt 0 ]; do
+  case "$1" in -n|--namespace) ns="$2"; shift ;; esac
+  shift
+done
+cluster="${KUBECONFIG##*/}"; cluster="${cluster%.config}"
+printf '\033[1;36m k9s\033[0m  cluster \033[1m%s\033[0m  ·  namespace \033[1m%s\033[0m\n' "${cluster:-default}" "$ns"

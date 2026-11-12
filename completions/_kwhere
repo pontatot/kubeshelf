@@ -1,0 +1,10 @@
+#compdef kwhere
+local _kt_config=""   # namespaces of every cluster
+_arguments -s \
+  '(- *)'{-h,--help}'[show help]' \
+  '(- *)'{-V,--version}'[show version]' \
+  '(-p --partial)'{-p,--partial}'[substring match on namespace names]' \
+  '(-q --quiet)'{-q,--quiet}'[only print config names]' \
+  '(-t --timeout)'{-t,--timeout}'[per-cluster timeout in seconds]:seconds' \
+  '(-s --skip-exec)'{-s,--skip-exec}'[use the cache for clusters with a credential plugin]' \
+  '1:namespace:_kubeshelf_ns'

@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Fake kubectl for tests.
+# - "config ..." subcommands are delegated to the real kubectl (they only read/write local files).
+# - "get namespace(s)" answers from $FAKE_CLUSTERS/<config name>:
+#     line 1: mode = ok | forbidden | unreachable | slow | hang | never
+#     next lines: namespaces of the cluster
+kubeconfig="${KUBECONFIG:-}"
+args=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --kubeconfig) kubeconfig="$2"; shift ;;
+    --kubeconfig=*) kubeconfig="${1#*=}" ;;
+    --request-timeout=*) ;;
+    *) args+=("$1") ;;
+  esac
+  shift
+done
+
+if [ "${args[0]}" = "config" ]; then
+  exec "$REAL_KUBECTL" --kubeconfig "$kubeconfig" "${args[@]}"
+fi
+
+name=$(basename "$kubeconfig")
+name="${name%"${KUBESHELF_CONFIG_SUFFIX:-.config}"}"
+fixture="$FAKE_CLUSTERS/$name"
+[ -f "$fixture" ] || { echo "fake kubectl: no fixture for $name" >&2; exit 99; }
+mode=$(head -1 "$fixture")
+
+case "$mode" in
+  unreachable)
+    echo 'E1112 10:00:00.000000 1 memcache.go:265] "Unhandled Error" err="couldn'"'"'t get current server API group list"' >&2
+    echo "Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout" >&2
+    exit 1 ;;
+  forbidden)
+    echo "Error from server (Forbidden): namespaces is forbidden: User \"system:serviceaccount:x:y\" cannot list resource \"namespaces\"" >&2
+    exit 1 ;;
+  slow) sleep 2 ;;
+  hang) sleep 30 ;;
+  never) echo "$name" >> "$FAKE_CLUSTERS/.contacted"; exit 97 ;;
+esac
+
+case "${args[0]} ${args[1]}" in
+  "get namespaces")
+    tail -n +2 "$fixture"
+    ;;
+  "get namespace")
+    if tail -n +2 "$fixture" | grep -qx -- "${args[2]}"; then
+      echo "namespace/${args[2]}"
+    else
+      echo "Error from server (NotFound): namespaces \"${args[2]}\" not found" >&2
+      exit 1
+    fi
+    ;;
+  *)
+    echo "fake kubectl: unsupported: ${args[*]}" >&2
+    exit 98 ;;
+esac

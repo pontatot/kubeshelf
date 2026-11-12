@@ -1,0 +1,16 @@
+#autoload
+# Completes kubeconfig names (files $KUBESHELF_CONFIG_DIR/*$KUBESHELF_CONFIG_SUFFIX)
+local dir=${KUBESHELF_CONFIG_DIR:-$HOME/.kube} suffix=${KUBESHELF_CONFIG_SUFFIX:-.config}
+local link=${KUBESHELF_DEFAULT_LINK:-$dir/config} current="" f name
+local -a configs
+[[ -L $link ]] && current=${$(readlink "$link"):t}
+for f in $dir/*$suffix(N-.); do
+  [[ $f == $link ]] && continue
+  name=${${f:t}%$suffix}
+  if [[ ${f:t} == $current ]]; then
+    configs+=("${name}:current default kubeconfig")
+  else
+    configs+=("${name}:kubeconfig")
+  fi
+done
+_describe -t configs "kubeconfigs" configs "$@"

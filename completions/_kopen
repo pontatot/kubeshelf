@@ -1,0 +1,11 @@
+#compdef kopen
+# Options of k9s itself are not completed; only kopen's own options and arguments.
+local _kt_config
+_kt_config=$(_kubeshelf_config_in_words)
+_arguments -s \
+  '(- *)'{-h,--help}'[show help]' \
+  '(- *)'{-V,--version}'[show version]' \
+  '(- *)'{-l,--list}'[list available kubeconfigs]' \
+  '(-n --namespace)'{-n,--namespace}'[open k9s in a namespace]:namespace:_kubeshelf_ns' \
+  '1:kubeconfig:_kubeshelf_configs' \
+  '*:: :_default'

@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+#
+# kopen - Open k9s on a given kubeconfig and/or namespace
+#
+
+# shellcheck source=../lib/common.sh
+. "$(dirname "$(readlink -f "$0")")/../lib/common.sh"
+
+KWHERE="$(dirname "$(readlink -f "$0")")/kwhere"
+K9S_BIN="${KUBESHELF_K9S_BIN:-$(command -v k9s 2>/dev/null)}"
+
+show_help() {
+  cat <<EOF
+${BOLD}Usage:${NC} kopen [CONFIG_NAME] [-n NAMESPACE] [K9S_OPTIONS...]
+
+Open k9s on ${BLUE}$KT_CONFIG_DIR/CONFIG_NAME$KT_SUFFIX${NC} and/or directly in NAMESPACE.
+
+${BOLD}Options:${NC}
+  ${CYAN}-h, --help${NC}            Show this help message and exit
+  ${CYAN}-V, --version${NC}         Show the version and exit
+  ${CYAN}-l, --list${NC}            List available kubeconfig files
+  ${CYAN}-n, --namespace NS${NC}    Open k9s directly in namespace NS.
+                        Without CONFIG_NAME, the clusters having NS are searched:
+                        opened directly if only one matches, otherwise pick one from a list.
+  Any other option is passed to k9s as-is (e.g. ${CYAN}-c deploy${NC}, ${CYAN}--readonly${NC}).
+
+${BOLD}Arguments:${NC}
+  ${CYAN}CONFIG_NAME${NC}    Kubeconfig to use (file name without $KT_SUFFIX).
+                 Without it, the default kubeconfig is used (KUBECONFIG or ~/.kube/config).
+  k9s subcommands (${CYAN}version, info, help, completion${NC}) are passed through.
+
+${BOLD}Examples:${NC}
+  ${YELLOW}kopen${NC}                           # k9s on the default kubeconfig
+  ${YELLOW}kopen prod${NC}                      # k9s on prod$KT_SUFFIX
+  ${YELLOW}kopen prod -n monitoring${NC}        # ... directly in the monitoring namespace
+  ${YELLOW}kopen -n payments${NC}               # find the cluster(s) having 'payments' and open it
+  ${YELLOW}kopen staging -n argocd -c deploy${NC}  # extra k9s options are passed through
+EOF
+}
+
+list_configs() {
+  local current name
+  current=$(kt_current_default)
+  echo "Available kubeconfig files:"
+  while IFS= read -r name; do
+    if [ "$name" = "$current" ]; then
+      echo "  ${GREEN}$name${NC} (current default)"
+    else
+      echo "  ${GREEN}$name${NC}"
+    fi
+  done < <(kt_config_names)
+}
+
+# Find the configs containing namespace $1 and let the user pick one; prints the chosen name
+pick_config_for_namespace() {
+  local ns="$1" current choice m
+  local -a matches labels
+  printf '%s\n' "${CYAN}Searching clusters for namespace '$ns'...${NC}" >&2
+  mapfile -t matches < <("$KWHERE" -q "$ns" | sort)
+
+  case ${#matches[@]} in
+    0)
+      kt_error "namespace '$ns' not found in any reachable cluster"
+      return 1
+      ;;
+    1)
+      printf '%s\n' "Found in ${GREEN}${matches[0]}${NC}" >&2
+      printf '%s\n' "${matches[0]}"
+      ;;
+    *)
+      current=$(kt_current_default)
+      printf '%s\n' "${BOLD}Namespace '$ns' exists in several clusters:${NC}" >&2
+      for m in "${matches[@]}"; do
+        if [ "$m" = "$current" ]; then labels+=("$m (current default)"); else labels+=("$m"); fi
+      done
+      PS3="Choose a cluster (number): "
+      select choice in "${labels[@]}"; do
+        [ -n "$choice" ] && { printf '%s\n' "${choice%% *}"; return 0; }
+        printf '%s\n' "${YELLOW}Invalid choice${NC}" >&2
+      done
+      return 1   # EOF (Ctrl-D)
+      ;;
+  esac
+}
+
+if [ -z "$K9S_BIN" ]; then
+  kt_error "k9s not found. Please install k9s first: https://k9scli.io"
+  exit 1
+fi
+
+# k9s subcommands are passed through untouched
+case "${1:-}" in
+  version|info|help|completion) exec "$K9S_BIN" "$@" ;;
+esac
+
+CONFIG=""
+NAMESPACE=""
+K9S_ARGS=()
+prev=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -h|--help) show_help; exit 0 ;;
+    -V|--version) kt_print_version kopen; exit 0 ;;
+    -l|--list) list_configs; exit 0 ;;
+    -n|--namespace)
+      shift
+      [ -n "${1:-}" ] || { kt_error "-n requires a namespace"; exit 1; }
+      NAMESPACE="$1"
+      ;;
+    --namespace=*) NAMESPACE="${1#*=}" ;;
+    -*) K9S_ARGS+=("$1") ;;
+    *)
+      if [ -z "$CONFIG" ] && kt_config_exists "$1"; then
+        CONFIG="$1"
+      elif [[ "$prev" == -* ]]; then
+        K9S_ARGS+=("$1")   # value of a k9s option (e.g. -c deploy)
+      else
+        kt_error "config file $(kt_config_path "$1") not found"
+        echo "Run 'kopen --list' to see available configurations" >&2
+        exit 1
+      fi
+      ;;
+  esac
+  prev="$1"
+  shift
+done
+
+# Namespace without config: find the cluster(s) that have it
+if [ -n "$NAMESPACE" ] && [ -z "$CONFIG" ] && [ -z "${KUBECONFIG:-}" ]; then
+  kt_require_kubectl
+  CONFIG=$(pick_config_for_namespace "$NAMESPACE") || exit 1
+fi
+
+if [ -n "$CONFIG" ]; then
+  kt_require_kubectl
+  KUBECONFIG="$(kt_config_path "$CONFIG")"
+  export KUBECONFIG
+  kt_refresh_ns_cache_bg "$CONFIG"
+fi
+
+[ -n "$NAMESPACE" ] && K9S_ARGS=(-n "$NAMESPACE" "${K9S_ARGS[@]}")
+
+exec "$K9S_BIN" "${K9S_ARGS[@]}"

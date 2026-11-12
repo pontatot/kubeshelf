@@ -1,0 +1,7 @@
+#autoload
+# Prints the first word of the command line that is an existing kubeconfig name
+local dir=${KUBESHELF_CONFIG_DIR:-$HOME/.kube} suffix=${KUBESHELF_CONFIG_SUFFIX:-.config} w
+for w in ${words[2,CURRENT-1]}; do
+  [[ $w != -* && -f $dir/$w$suffix ]] && { print -r -- "$w"; return 0; }
+done
+return 1

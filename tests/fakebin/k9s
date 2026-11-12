@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Fake k9s for tests: prints what it was called with
+echo "k9s args=[$*] KUBECONFIG=${KUBECONFIG:-}"

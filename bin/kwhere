@@ -1,0 +1,149 @@
+#!/usr/bin/env bash
+#
+# kwhere - Find which kubeconfigs contain a given namespace
+#
+
+# shellcheck source=../lib/common.sh
+. "$(dirname "$(readlink -f "$0")")/../lib/common.sh"
+
+show_help() {
+  cat <<EOF
+${BOLD}Usage:${NC} kwhere [OPTIONS] NAMESPACE
+
+List the kubeconfigs in ${BLUE}$KT_CONFIG_DIR/*$KT_SUFFIX${NC} whose cluster contains NAMESPACE.
+Clusters are queried in parallel and printed as soon as they answer.
+
+${BOLD}Options:${NC}
+  ${CYAN}-h, --help${NC}        Show this help message and exit
+  ${CYAN}-V, --version${NC}     Show the version and exit
+  ${CYAN}-p, --partial${NC}     Match namespaces containing NAMESPACE (substring) instead of the exact name
+  ${CYAN}-q, --quiet${NC}       Only print config names, one per line (script friendly)
+  ${CYAN}-t, --timeout N${NC}   Per-cluster request timeout in seconds (default: $KT_TIMEOUT)
+  ${CYAN}-s, --skip-exec${NC}    Don't contact clusters using a credential plugin (EKS, GKE, OIDC...):
+                    match them against the namespace cache instead (KUBESHELF_SKIP_EXEC=1)
+
+${BOLD}Notes:${NC}
+  Configs whose credentials cannot list namespaces (namespace-scoped service accounts)
+  are matched against the namespace of their context instead.
+  Unreachable clusters are reported on stderr. Exit status is 1 when nothing matches.
+  Credential plugins run without a terminal (no prompt), so one needing an interactive
+  login fails or times out: log in once with kubectl, or use --skip-exec.
+
+${BOLD}Examples:${NC}
+  ${YELLOW}kwhere monitoring${NC}             # Configs whose cluster has a 'monitoring' namespace
+  ${YELLOW}kwhere -p payments${NC}            # Configs with a namespace containing 'payments'
+  ${YELLOW}kopen "\$(kwhere -q argocd | head -1)" -n argocd${NC}
+EOF
+}
+
+PARTIAL=0
+QUIET=0
+NAMESPACE=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -h|--help) show_help; exit 0 ;;
+    -V|--version) kt_print_version kwhere; exit 0 ;;
+    -p|--partial) PARTIAL=1 ;;
+    -q|--quiet) QUIET=1 ;;
+    -s|--skip-exec) KT_SKIP_EXEC=1 ;;
+    -t|--timeout)
+      shift
+      [[ "${1:-}" =~ ^[0-9]+$ ]] || { kt_error "--timeout requires a number of seconds"; exit 1; }
+      KT_TIMEOUT="$1"
+      ;;
+    -*) kt_error "unknown option $1"; echo "Run 'kwhere --help' for usage" >&2; exit 1 ;;
+    *) NAMESPACE="$1" ;;
+  esac
+  shift
+done
+
+if [ -z "$NAMESPACE" ]; then
+  kt_error "missing NAMESPACE"
+  echo "Run 'kwhere --help' for usage" >&2
+  exit 1
+fi
+
+kt_require_kubectl
+
+mapfile -t configs < <(kt_config_names)
+if [ ${#configs[@]} -eq 0 ]; then
+  kt_warn "no *$KT_SUFFIX files found in $KT_CONFIG_DIR"
+  exit 1
+fi
+
+tmpdir=$(mktemp -d)
+trap 'rm -rf "$tmpdir"' EXIT
+
+# Print a result as soon as a cluster answers (single printf: lines never interleave)
+report() {
+  local name="$1" status="$2" detail="$3" extra=""
+  case "$status" in
+    found|scoped|cached)
+      : > "$tmpdir/$name.hit"
+      if [ "$QUIET" -eq 1 ]; then
+        printf '%s\n' "$name"
+      else
+        [ "$status" = "scoped" ] && extra=" ${YELLOW}(scoped credentials)${NC}"
+        [ "$status" = "cached" ] && extra=" ${YELLOW}(from cache)${NC}"
+        [ "$PARTIAL" -eq 1 ] && extra="$extra ${CYAN}[${detail% }]${NC}"
+        printf '%s\n' "  ${GREEN}$name${NC} (${BLUE}$(kt_server "$name")${NC})$extra"
+      fi
+      ;;
+    error)
+      [ "$QUIET" -eq 0 ] && printf '%s\n' "  ${RED}$name: unreachable${NC} - $detail" >&2
+      ;;
+  esac
+}
+
+matches_namespace() {
+  if [ "$PARTIAL" -eq 1 ]; then grep -F -- "$NAMESPACE"; else grep -Fx -- "$NAMESPACE"; fi
+}
+
+check_config() {
+  local name="$1" out ctx_ns matches plugin rc msg
+  plugin=$(kt_exec_auth "$name")
+
+  # Credential plugin + --skip-exec: answer from the cache, don't contact the cluster
+  if [ -n "$plugin" ] && [ "$KT_SKIP_EXEC" = "1" ]; then
+    if [ -r "$KT_NS_CACHE_DIR/$name" ]; then
+      matches=$(matches_namespace < "$KT_NS_CACHE_DIR/$name")
+      [ -n "$matches" ] && report "$name" cached "$(tr '\n' ' ' <<< "$matches")"
+    fi
+    return 0
+  fi
+
+  # stdin closed: parallel credential plugins must never prompt on the terminal
+  out=$(kt_list_namespaces "$name" 2>&1 </dev/null); rc=$?
+  if [ "$rc" -eq 0 ]; then
+    printf '%s\n' "$out" | kt_cache_namespaces "$name"
+    matches=$(matches_namespace <<< "$out")
+    [ -n "$matches" ] && report "$name" found "$(tr '\n' ' ' <<< "$matches")"
+  elif grep -q "Forbidden" <<< "$out"; then
+    # Namespace-scoped credentials: fall back to the context namespace
+    ctx_ns=$(kt_context_field "$name" namespace)
+    [ -n "$ctx_ns" ] && printf '%s\n' "$ctx_ns" | kt_cache_namespaces "$name"
+    if [ -n "$ctx_ns" ] && [ -n "$(matches_namespace <<< "$ctx_ns")" ]; then
+      report "$name" scoped "$ctx_ns"
+    fi
+  else
+    if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then
+      msg="timed out after ${KT_TIMEOUT}s"
+    else
+      msg=$(kt_short_error "$out")
+    fi
+    [ -n "$plugin" ] && msg="$msg (credential plugin: $plugin; log in with kubectl or use --skip-exec)"
+    report "$name" error "$msg"
+  fi
+}
+
+for name in "${configs[@]}"; do
+  check_config "$name" &
+done
+wait
+
+if [ -z "$(find "$tmpdir" -name '*.hit' -print -quit)" ]; then
+  [ "$QUIET" -eq 0 ] && kt_warn "namespace '$NAMESPACE' not found in any reachable cluster"
+  exit 1
+fi
+exit 0
